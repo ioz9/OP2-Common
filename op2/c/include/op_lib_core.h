@@ -82,6 +82,15 @@ typedef enum { OP_READ, OP_WRITE, OP_RW, OP_INC, OP_MIN, OP_MAX } op_access;
 typedef enum { OP_ARG_GBL, OP_ARG_DAT } op_arg_type;
 
 /*
+ * symbolic indices
+ */
+
+/* index for direct mapping */
+#define OP_NONE -1
+/* all indices selector */
+#define OP_ALL -2
+
+/*
  * structures
  */
 
