@@ -30,7 +30,9 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # Sequential library
-add_library(op2_seq ${COMMON_SRC} ${RT_SRC} op_seq.c)
+include_directories(${PETSC_INCLUDE_DIRS})
+add_library(op2_seq ${COMMON_SRC} ${RT_SRC} op_seq.c op_mat_seq.cpp)
+target_link_libraries(op2_seq ${PETSC_LIBRARIES})
 
 # Add target to the build-tree export set
 export(TARGETS op2_seq APPEND
