@@ -1,4 +1,4 @@
-inline void res_calc(float *x[2], float *q[4], float *adt[1],float *res[4]) {
+inline void res_calc(float *x[2], float *q[4], float *adt,float *res[4]) {
   float dx,dy,mu, ri, p1,vol1, p2,vol2, f;
 
   dx = x[0][0] - x[1][0];
@@ -12,7 +12,7 @@ inline void res_calc(float *x[2], float *q[4], float *adt[1],float *res[4]) {
   p2   = gm1*(q[1][3]-0.5f*ri*(q[1][1]*q[1][1]+q[1][2]*q[1][2]));
   vol2 =  ri*(q[1][1]*dy - q[1][2]*dx);
 
-  mu = 0.5f*(adt[0][0]+adt[1][0])*eps;
+  mu = 0.5f*(adt[0]+adt[1])*eps;
 
   f = 0.5f*(vol1* q[0][0]         + vol2* q[1][0]        ) + mu*(q[0][0]-q[1][0]);
   res[0][0] += f;

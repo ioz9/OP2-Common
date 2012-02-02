@@ -39,6 +39,7 @@ header_h = """/*
 #define __OP_SEQ_H
 
 #include "op_lib_mat.h"
+#include <boost/type_traits.hpp>
 
 static inline void op_arg_set(int n, op_arg arg, char **p_arg){
   int n2;
@@ -49,11 +50,21 @@ static inline void op_arg_set(int n, op_arg arg, char **p_arg){
   *p_arg = arg.data + n2*arg.size;
 }
 
+template<class T>
 static inline void copy_in(int n, op_arg arg, char **p_arg) {
-  // For each index in the target dimension of the map, copy the pointer to
-  // the data
-  for (int i = 0; i < arg.map->dim; ++i)
+  // Get the base type of the kernel argument (double, float, etc...)
+  // discarding any array extents or const modifiers.
+  typedef typename boost::remove_extent<T>::type tmp;
+  typedef typename boost::remove_const<tmp>::type value_type;
+  if ( arg.dat->dim == 1 ) {
+    // one-dim data, need to copy contents
+    for ( int i = 0; i < arg.map->dim; ++i )
+      ((value_type *)p_arg)[i] = ((value_type *)arg.data)[arg.map->map[i + n*arg.map->dim]];
+  } else {
+    // vector data, need to copy pointers
+    for (int i = 0; i < arg.map->dim; ++i)
       p_arg[i] = arg.data + arg.map->map[i+n*arg.map->dim]*arg.size;
+  }
 }
 
 """
@@ -130,7 +141,7 @@ templates = {
 'argsetters': """
     if (arg%d.argtype == OP_ARG_DAT) {
       if (arg%d.idx == OP_ALL)
-        copy_in(n, arg%d, (char**)p_arg%d);
+        copy_in<T%d>(n, arg%d, (char**)p_arg%d);
       else
         op_arg_set(n, arg%d, &p_arg%d );
     }
@@ -174,7 +185,7 @@ with open(file_h,"w") as h:
           'argdefs': format_block("  char ", ";", "*p_arg%d = 0", ", ", 1, n, 4),
           'argchecks': '\n'.join(["    op_arg_check(set,%d ,arg%d ,&ninds,name);" % (i,i) for i in range(n)]),
           'allocate': ''.join([templates['allocate'] % ((i,)*11) for i in range(n)]),
-          'argsetters': ''.join([templates['argsetters'] % ((i,)*6) for i in range(n)]),
+          'argsetters': ''.join([templates['argsetters'] % ((i,)*7) for i in range(n)]),
           'mataddto': ''.join([templates['mataddto'] % ((i,)*7) for i in range(n)]),
           'kernelcall': format_block("    kernel( ", " );", "(T%d *)p_arg%d", ", ", 2, n, 4),
           'free': ''.join([templates['free'] % ((i,)*4) for i in range(n)]),
