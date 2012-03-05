@@ -82,11 +82,11 @@ hdf5: $(SRC)/externlib/op_hdf5.c $(INC)/op_hdf5.h
 	ar -r $(LIB)/libop2_hdf5.a $(OBJ)/externlib/op_hdf5.o $(OBJ)/externlib/op_util.o
 	
 
-seq: core $(INC)/op_seq.h $(SRC)/sequential/op_seq.c $(SRC)/sequential/op_mat_seq.cpp $(OBJ)/core/op_lib_core.o
-	$(CPP) $(CPPFLAGS) -I$(INC) -c $(SRC)/sequential/op_seq.c -o $(OBJ)/op_seq.o
+seq: core $(INC)/op_seq.h $(SRC)/sequential/op_seq.c $(SRC)/sequential/op_mat_seq.cpp $(OBJ)/core/op_lib_core.o $(OBJ)/core/op_lib_util.o
+	$(MPICPP) $(CPPFLAGS) -I$(INC) $(PETSC_INC) $(PETSC_LIB) -c $(SRC)/sequential/op_seq.c -o $(OBJ)/op_seq.o
 	$(CPP) $(CPPFLAGS) -I$(INC) -c $(SRC)/core/op_rt_support.c -o $(OBJ)/core/op_rt_support.o
-	$(CPP) $(CPPFLAGS) -I$(INC) $(PETSC_INC) $(PETSC_LIB) -c $(SRC)/sequential/op_mat_seq.cpp -o $(OBJ)/op_mat_seq.o
-	ar -r $(LIB)/libop2_seq.a $(OBJ)/op_seq.o $(OBJ)/op_mat_seq.o $(OBJ)/core/op_lib_core.o $(OBJ)/core/op_rt_support.o
+	$(MPICPP) $(CPPFLAGS) -I$(INC) $(PETSC_INC) $(PETSC_LIB) -c $(SRC)/sequential/op_mat_seq.cpp -o $(OBJ)/op_mat_seq.o
+	ar -r $(LIB)/libop2_seq.a $(OBJ)/op_seq.o $(OBJ)/op_mat_seq.o $(OBJ)/core/op_lib_core.o $(OBJ)/core/op_lib_util.o $(OBJ)/core/op_rt_support.o
 
 cuda: $(INC)/op_cuda_rt_support.h $(INC)/op_cuda_reduction.h $(SRC)/cuda/op_cuda_decl.c \
 	$(SRC)/cuda/op_cuda_rt_support.c $(OBJ)/core/op_lib_core.o $(OBJ)/core/op_lib_util.o
