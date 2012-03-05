@@ -139,7 +139,7 @@ endif()
 # Common source files
 
 # Core library sources
-set(COMMON_SRC "${OP2_SOURCE_DIR}/src/core/op_lib_core.c")
+set(COMMON_SRC "${OP2_SOURCE_DIR}/src/core/op_lib_core.c" "${OP2_SOURCE_DIR}/src/core/op_lib_util.cpp")
 # Utility sources
 set(UTIL_SRC "${OP2_SOURCE_DIR}/src/externlib/op_util.c")
 # Runtime support sources
