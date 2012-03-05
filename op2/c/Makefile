@@ -70,8 +70,9 @@ PETSC_LIB = -L$(PETSC_DIR)/$(PETSC_ARCH)/lib -lpetsc
 
 all: clean core hdf5 seq openmp cuda mpi_seq mpi_cuda   
 
-core: $(INC)/op_lib_core.h $(SRC)/core/op_lib_core.c
+core: $(INC)/op_lib_core.h $(SRC)/core/op_lib_core.c $(SRC)/core/op_lib_util.cpp
 	$(CPP) $(CPPFLAGS) -I$(INC) -c $(SRC)/core/op_lib_core.c -o $(OBJ)/core/op_lib_core.o
+	$(CPP) $(CPPFLAGS) -I$(INC) -c $(SRC)/core/op_lib_util.cpp -o $(OBJ)/core/op_lib_util.o
 	$(CPP) $(CPPFLAGS) -I$(INC) -c $(SRC)/externlib/op_util.c -o $(OBJ)/externlib/op_util.o
 	
 hdf5: $(SRC)/externlib/op_hdf5.c $(INC)/op_hdf5.h
@@ -88,7 +89,7 @@ seq: core $(INC)/op_seq.h $(SRC)/sequential/op_seq.c $(SRC)/sequential/op_mat_se
 	ar -r $(LIB)/libop2_seq.a $(OBJ)/op_seq.o $(OBJ)/op_mat_seq.o $(OBJ)/core/op_lib_core.o $(OBJ)/core/op_rt_support.o
 
 cuda: $(INC)/op_cuda_rt_support.h $(INC)/op_cuda_reduction.h $(SRC)/cuda/op_cuda_decl.c \
-	$(SRC)/cuda/op_cuda_rt_support.c $(OBJ)/core/op_lib_core.o
+	$(SRC)/cuda/op_cuda_rt_support.c $(OBJ)/core/op_lib_core.o $(OBJ)/core/op_lib_util.o
 	
 	$(CPP) -DSET_CUDA_CACHE_CONFIG $(FLAGS) $(CUDA_INC) -I$(INC) \
 	-c $(SRC)/cuda/op_cuda_decl.c -o $(OBJ)/cuda/op_cuda_decl.o
@@ -97,7 +98,7 @@ cuda: $(INC)/op_cuda_rt_support.h $(INC)/op_cuda_reduction.h $(SRC)/cuda/op_cuda
 	$(CPP) $(CPPFLAGS) -I$(INC) -c $(SRC)/core/op_rt_support.c -o $(OBJ)/core/op_rt_support.o
 	
 	ar -r $(LIB)/libop2_cuda.a $(OBJ)/cuda/op_cuda_rt_support.o \
-	$(OBJ)/cuda/op_cuda_decl.o $(OBJ)/core/op_lib_core.o $(OBJ)/core/op_rt_support.o 
+	$(OBJ)/cuda/op_cuda_decl.o $(OBJ)/core/op_lib_core.o $(OBJ)/core/op_lib_util.o $(OBJ)/core/op_rt_support.o 
 	
 
 openmp: $(SRC)/openmp/op_openmp_decl.c $(OBJ)/core/op_lib_core.o
