@@ -41,6 +41,8 @@ set(OP2_APPS
   airfoil_mpi_openmp
   jac1
   jac2
+  laplace1d
+  mass2d
   )
 
 # Add each OP2 app directory
