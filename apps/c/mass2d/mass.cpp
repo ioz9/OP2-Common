@@ -45,8 +45,6 @@ int main(int argc, char **argv)
                 op_arg_mat(mat, OP_ALL, elem_node, OP_ALL, elem_node, 1, "double", OP_INC),
                 op_arg_dat(xn, OP_ALL, elem_node, 2, "double", OP_READ));
 
-    free(p_elem_node);
-    free(p_xn);
     op_exit();
     return 0;
 }
