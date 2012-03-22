@@ -304,6 +304,14 @@ static int op_plan_args_match ( int nargs, op_arg *args, const op_plan plan )
       /* No match */
       return 0;
     }
+    /* If this is an op_mat arg, check additional fields */
+    if ( args[m].argtype == OP_ARG_MAT &&
+         !( ( args[m].mat == plan.mats[m] )
+            && ( args[m].map2 == plan.maps2[m] )
+            && ( args[m].idx2 == plan.idxs2[m] ) ) )
+    {
+      return 0;
+    }
   }
   return 1;
 }
@@ -387,8 +395,11 @@ op_plan *op_plan_core(char const *name, op_set set, int set_offset, int part_siz
   /* allocate memory for new execution plan and store input arguments */
 
   OP_plans[ip].dats = ( op_dat * ) malloc ( nargs * sizeof ( op_dat ) );
+  OP_plans[ip].mats = ( op_mat * ) malloc ( nargs * sizeof ( op_mat ) );
   OP_plans[ip].idxs = ( int * ) malloc ( nargs * sizeof ( int ) );
+  OP_plans[ip].idxs2 = ( int * ) malloc ( nargs * sizeof ( int ) );
   OP_plans[ip].maps = ( op_map * ) malloc ( nargs * sizeof ( op_map ) );
+  OP_plans[ip].maps2 = ( op_map * ) malloc ( nargs * sizeof ( op_map ) );
   OP_plans[ip].accs = ( op_access * ) malloc ( nargs * sizeof ( op_access ) );
 
   OP_plans[ip].nthrcol = ( int * ) malloc ( nblocks * sizeof ( int ) );
