@@ -47,8 +47,11 @@ typedef struct {
   op_set       set;
   int          nargs, ninds, part_size;
   op_map      *maps;
+  op_map      *maps2;
   op_dat      *dats;
+  op_mat      *mats;
   int         *idxs;
+  int         *idxs2;
   op_access   *accs;
 
   /* execution plan */
