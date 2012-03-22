@@ -292,6 +292,22 @@ void op_plan_check( op_plan OP_plan, int ninds, int * inds)
  * OP plan construction
  */
 
+static int op_plan_args_match ( int nargs, op_arg *args, const op_plan plan )
+{
+  for ( int m = 0; m < nargs; m++ )
+  {
+    if ( !( ( args[m].dat == plan.dats[m] )
+            && ( args[m].map == plan.maps[m] )
+            && ( args[m].idx == plan.idxs[m] )
+            && ( args[m].acc == plan.accs[m] ) ) )
+    {
+      /* No match */
+      return 0;
+    }
+  }
+  return 1;
+}
+
 op_plan *op_plan_core(char const *name, op_set set, int set_offset, int part_size,
     int nargs, op_arg *args, int ninds, int *inds )
 {
@@ -319,14 +335,7 @@ op_plan *op_plan_core(char const *name, op_set set, int set_offset, int part_siz
         && ( ninds == OP_plans[ip].ninds )
         && ( part_size == OP_plans[ip].part_size ) )
     {
-      match = 1;
-      for ( int m = 0; m < nargs; m++ )
-      {
-        match = match && ( args[m].dat == OP_plans[ip].dats[m] )
-          && ( args[m].map == OP_plans[ip].maps[m] )
-          && ( args[m].idx == OP_plans[ip].idxs[m] )
-          && ( args[m].acc == OP_plans[ip].accs[m] );
-      }
+      match = op_plan_args_match ( nargs, args, OP_plans[ip] );
     }
     ip++;
   }
