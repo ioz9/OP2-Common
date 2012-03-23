@@ -89,6 +89,9 @@ typedef enum { OP_ARG_GBL, OP_ARG_DAT, OP_ARG_MAT } op_arg_type;
 #define OP_NONE -1
 /* all indices selector */
 #define OP_ALL -2
+/* op_i(int) translation */
+#define OP_I_OFFSET -1024
+#define op_i(idx) (OP_I_OFFSET - (idx))
 
 /*
  * structures
@@ -163,6 +166,15 @@ typedef struct
 } op_mat_core;
 
 typedef op_mat_core * op_mat;
+
+typedef struct
+{
+  op_set set;                   /* set associated with the iteration space */
+  int    ndims;                 /* number of extra iteration dimensions */
+  int   *dims;                  /* upper extent of the extra iteration dimensions */
+} op_itspace_core;
+
+typedef op_itspace_core * op_itspace;
 
 typedef struct
 {
