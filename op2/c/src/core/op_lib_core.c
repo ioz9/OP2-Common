@@ -466,11 +466,11 @@ op_arg_check ( op_set set, int m, op_arg arg, int * ninds, const char * name )
 
     if ( ( arg.map == NULL && arg.idx != OP_NONE ) ||
          ( arg.map != NULL &&
-           ( (arg.idx != OP_ALL && arg.idx < 0) || arg.idx >= arg.map->dim ) ) )
+           ( (arg.idx != OP_ALL && arg.idx > OP_I_OFFSET && arg.idx < 0) || arg.idx >= arg.map->dim ) ) )
       op_err_print ( "invalid row index", m, name );
     if ( ( arg.map2 == NULL && arg.idx2 != OP_NONE ) ||
          ( arg.map2 != NULL &&
-           ( (arg.idx2 != OP_ALL && arg.idx2 < 0) || arg.idx2 >= arg.map2->dim ) ) )
+           ( (arg.idx2 != OP_ALL && arg.idx2 > OP_I_OFFSET && arg.idx2 < 0) || arg.idx2 >= arg.map2->dim ) ) )
       op_err_print ( "invalid col index", m, name );
 
     if ( arg.mat->dim != arg.dim )
