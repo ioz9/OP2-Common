@@ -44,21 +44,10 @@ static inline void op_arg_set(int n, op_arg arg, char **p_arg){
   *p_arg = arg.data + n2*arg.size;
 }
 
-template<class T>
 static inline void copy_in(int n, op_arg arg, char **p_arg) {
-  // Get the base type of the kernel argument (double, float, etc...)
-  // discarding any array extents or const modifiers.
-  typedef typename boost::remove_extent<T>::type tmp;
-  typedef typename boost::remove_const<tmp>::type value_type;
-  if ( arg.dat->dim == 1 ) {
-    // one-dim data, need to copy contents
-    for ( int i = 0; i < arg.map->dim; ++i )
-      ((value_type *)p_arg)[i] = ((value_type *)arg.data)[arg.map->map[i + n*arg.map->dim]];
-  } else {
-    // vector data, need to copy pointers
-    for (int i = 0; i < arg.map->dim; ++i)
-      p_arg[i] = arg.data + arg.map->map[i+n*arg.map->dim]*arg.size;
-  }
+  // vector data, need to copy pointers
+  for (int i = 0; i < arg.map->dim; ++i)
+    p_arg[i] = arg.data + arg.map->map[i+n*arg.map->dim]*arg.size;
 }
 
 op_itspace op_iteration_space(op_set set, int i, int j)
@@ -121,7 +110,7 @@ void op_par_loop ( void (*kernel)( T0* ),
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
@@ -195,7 +184,7 @@ void op_par_loop ( void (*kernel)( T0*, int, int ),
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
@@ -356,14 +345,14 @@ void op_par_loop ( void (*kernel)( T0*, T1* ),
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
@@ -403,8 +392,8 @@ void op_par_loop ( void (*kernel)( T0*, T1* ),
 
 template < class T0, class T1 >
 void op_par_loop ( void (*kernel)( T0*, T1*, int, int ),
-                   char const * name, op_itspace itspace,
-                   op_arg arg0, op_arg arg1 )
+  char const * name, op_itspace itspace,
+  op_arg arg0, op_arg arg1 )
 {
   char *p_arg0 = 0, *p_arg1 = 0;
   op_set set = itspace->set;
@@ -428,16 +417,16 @@ void op_par_loop ( void (*kernel)( T0*, T1*, int, int ),
 
   switch ( arg0.argtype ) {
     // Globals need their pointer only set once before the loop
-  case OP_ARG_GBL:
-    p_arg0 = arg0.data;
-    break;
-  case OP_ARG_DAT:
-    if (arg0.idx  == OP_ALL)
-      p_arg0 = (char *)malloc(arg0.map->dim*sizeof(T0));
-    break;
-  case OP_ARG_MAT:
-    p_arg0 = (char*) malloc(sizeof(T0));
-    break;
+    case OP_ARG_GBL:
+      p_arg0 = arg0.data;
+      break;
+    case OP_ARG_DAT:
+      if (arg0.idx  == OP_ALL)
+        p_arg0 = (char *)malloc(arg0.map->dim*sizeof(T0));
+      break;
+    case OP_ARG_MAT:
+      p_arg0 = (char*) malloc(sizeof(T0));
+      break;
   }
 
   switch ( arg1.argtype ) {
@@ -461,14 +450,14 @@ void op_par_loop ( void (*kernel)( T0*, T1*, int, int ),
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
@@ -709,21 +698,21 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2* ),
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
@@ -845,21 +834,21 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2*, int, int ),
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
@@ -1180,28 +1169,28 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2*, T3* ),
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
 
     if (arg3.argtype == OP_ARG_DAT) {
       if (arg3.idx == OP_ALL)
-        copy_in<T3>(n, arg3, (char**)p_arg3);
+        copy_in(n, arg3, (char**)p_arg3);
       else
         op_arg_set(n, arg3, &p_arg3 );
     }
@@ -1347,28 +1336,28 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2*, T3*, int, int ),
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
 
     if (arg3.argtype == OP_ARG_DAT) {
       if (arg3.idx == OP_ALL)
-        copy_in<T3>(n, arg3, (char**)p_arg3);
+        copy_in(n, arg3, (char**)p_arg3);
       else
         op_arg_set(n, arg3, &p_arg3 );
     }
@@ -1773,35 +1762,35 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2*, T3*,
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
 
     if (arg3.argtype == OP_ARG_DAT) {
       if (arg3.idx == OP_ALL)
-        copy_in<T3>(n, arg3, (char**)p_arg3);
+        copy_in(n, arg3, (char**)p_arg3);
       else
         op_arg_set(n, arg3, &p_arg3 );
     }
 
     if (arg4.argtype == OP_ARG_DAT) {
       if (arg4.idx == OP_ALL)
-        copy_in<T4>(n, arg4, (char**)p_arg4);
+        copy_in(n, arg4, (char**)p_arg4);
       else
         op_arg_set(n, arg4, &p_arg4 );
     }
@@ -1976,35 +1965,35 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2*, T3*,
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
 
     if (arg3.argtype == OP_ARG_DAT) {
       if (arg3.idx == OP_ALL)
-        copy_in<T3>(n, arg3, (char**)p_arg3);
+        copy_in(n, arg3, (char**)p_arg3);
       else
         op_arg_set(n, arg3, &p_arg3 );
     }
 
     if (arg4.argtype == OP_ARG_DAT) {
       if (arg4.idx == OP_ALL)
-        copy_in<T4>(n, arg4, (char**)p_arg4);
+        copy_in(n, arg4, (char**)p_arg4);
       else
         op_arg_set(n, arg4, &p_arg4 );
     }
@@ -2490,42 +2479,42 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2*, T3*,
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
 
     if (arg3.argtype == OP_ARG_DAT) {
       if (arg3.idx == OP_ALL)
-        copy_in<T3>(n, arg3, (char**)p_arg3);
+        copy_in(n, arg3, (char**)p_arg3);
       else
         op_arg_set(n, arg3, &p_arg3 );
     }
 
     if (arg4.argtype == OP_ARG_DAT) {
       if (arg4.idx == OP_ALL)
-        copy_in<T4>(n, arg4, (char**)p_arg4);
+        copy_in(n, arg4, (char**)p_arg4);
       else
         op_arg_set(n, arg4, &p_arg4 );
     }
 
     if (arg5.argtype == OP_ARG_DAT) {
       if (arg5.idx == OP_ALL)
-        copy_in<T5>(n, arg5, (char**)p_arg5);
+        copy_in(n, arg5, (char**)p_arg5);
       else
         op_arg_set(n, arg5, &p_arg5 );
     }
@@ -2724,42 +2713,42 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2*, T3*,
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
 
     if (arg3.argtype == OP_ARG_DAT) {
       if (arg3.idx == OP_ALL)
-        copy_in<T3>(n, arg3, (char**)p_arg3);
+        copy_in(n, arg3, (char**)p_arg3);
       else
         op_arg_set(n, arg3, &p_arg3 );
     }
 
     if (arg4.argtype == OP_ARG_DAT) {
       if (arg4.idx == OP_ALL)
-        copy_in<T4>(n, arg4, (char**)p_arg4);
+        copy_in(n, arg4, (char**)p_arg4);
       else
         op_arg_set(n, arg4, &p_arg4 );
     }
 
     if (arg5.argtype == OP_ARG_DAT) {
       if (arg5.idx == OP_ALL)
-        copy_in<T5>(n, arg5, (char**)p_arg5);
+        copy_in(n, arg5, (char**)p_arg5);
       else
         op_arg_set(n, arg5, &p_arg5 );
     }
@@ -3325,49 +3314,49 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2*, T3*,
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
 
     if (arg3.argtype == OP_ARG_DAT) {
       if (arg3.idx == OP_ALL)
-        copy_in<T3>(n, arg3, (char**)p_arg3);
+        copy_in(n, arg3, (char**)p_arg3);
       else
         op_arg_set(n, arg3, &p_arg3 );
     }
 
     if (arg4.argtype == OP_ARG_DAT) {
       if (arg4.idx == OP_ALL)
-        copy_in<T4>(n, arg4, (char**)p_arg4);
+        copy_in(n, arg4, (char**)p_arg4);
       else
         op_arg_set(n, arg4, &p_arg4 );
     }
 
     if (arg5.argtype == OP_ARG_DAT) {
       if (arg5.idx == OP_ALL)
-        copy_in<T5>(n, arg5, (char**)p_arg5);
+        copy_in(n, arg5, (char**)p_arg5);
       else
         op_arg_set(n, arg5, &p_arg5 );
     }
 
     if (arg6.argtype == OP_ARG_DAT) {
       if (arg6.idx == OP_ALL)
-        copy_in<T6>(n, arg6, (char**)p_arg6);
+        copy_in(n, arg6, (char**)p_arg6);
       else
         op_arg_set(n, arg6, &p_arg6 );
     }
@@ -3590,49 +3579,49 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2*, T3*,
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
 
     if (arg3.argtype == OP_ARG_DAT) {
       if (arg3.idx == OP_ALL)
-        copy_in<T3>(n, arg3, (char**)p_arg3);
+        copy_in(n, arg3, (char**)p_arg3);
       else
         op_arg_set(n, arg3, &p_arg3 );
     }
 
     if (arg4.argtype == OP_ARG_DAT) {
       if (arg4.idx == OP_ALL)
-        copy_in<T4>(n, arg4, (char**)p_arg4);
+        copy_in(n, arg4, (char**)p_arg4);
       else
         op_arg_set(n, arg4, &p_arg4 );
     }
 
     if (arg5.argtype == OP_ARG_DAT) {
       if (arg5.idx == OP_ALL)
-        copy_in<T5>(n, arg5, (char**)p_arg5);
+        copy_in(n, arg5, (char**)p_arg5);
       else
         op_arg_set(n, arg5, &p_arg5 );
     }
 
     if (arg6.argtype == OP_ARG_DAT) {
       if (arg6.idx == OP_ALL)
-        copy_in<T6>(n, arg6, (char**)p_arg6);
+        copy_in(n, arg6, (char**)p_arg6);
       else
         op_arg_set(n, arg6, &p_arg6 );
     }
@@ -4278,56 +4267,56 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2*, T3*,
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
 
     if (arg3.argtype == OP_ARG_DAT) {
       if (arg3.idx == OP_ALL)
-        copy_in<T3>(n, arg3, (char**)p_arg3);
+        copy_in(n, arg3, (char**)p_arg3);
       else
         op_arg_set(n, arg3, &p_arg3 );
     }
 
     if (arg4.argtype == OP_ARG_DAT) {
       if (arg4.idx == OP_ALL)
-        copy_in<T4>(n, arg4, (char**)p_arg4);
+        copy_in(n, arg4, (char**)p_arg4);
       else
         op_arg_set(n, arg4, &p_arg4 );
     }
 
     if (arg5.argtype == OP_ARG_DAT) {
       if (arg5.idx == OP_ALL)
-        copy_in<T5>(n, arg5, (char**)p_arg5);
+        copy_in(n, arg5, (char**)p_arg5);
       else
         op_arg_set(n, arg5, &p_arg5 );
     }
 
     if (arg6.argtype == OP_ARG_DAT) {
       if (arg6.idx == OP_ALL)
-        copy_in<T6>(n, arg6, (char**)p_arg6);
+        copy_in(n, arg6, (char**)p_arg6);
       else
         op_arg_set(n, arg6, &p_arg6 );
     }
 
     if (arg7.argtype == OP_ARG_DAT) {
       if (arg7.idx == OP_ALL)
-        copy_in<T7>(n, arg7, (char**)p_arg7);
+        copy_in(n, arg7, (char**)p_arg7);
       else
         op_arg_set(n, arg7, &p_arg7 );
     }
@@ -4574,56 +4563,56 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2*, T3*,
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
 
     if (arg3.argtype == OP_ARG_DAT) {
       if (arg3.idx == OP_ALL)
-        copy_in<T3>(n, arg3, (char**)p_arg3);
+        copy_in(n, arg3, (char**)p_arg3);
       else
         op_arg_set(n, arg3, &p_arg3 );
     }
 
     if (arg4.argtype == OP_ARG_DAT) {
       if (arg4.idx == OP_ALL)
-        copy_in<T4>(n, arg4, (char**)p_arg4);
+        copy_in(n, arg4, (char**)p_arg4);
       else
         op_arg_set(n, arg4, &p_arg4 );
     }
 
     if (arg5.argtype == OP_ARG_DAT) {
       if (arg5.idx == OP_ALL)
-        copy_in<T5>(n, arg5, (char**)p_arg5);
+        copy_in(n, arg5, (char**)p_arg5);
       else
         op_arg_set(n, arg5, &p_arg5 );
     }
 
     if (arg6.argtype == OP_ARG_DAT) {
       if (arg6.idx == OP_ALL)
-        copy_in<T6>(n, arg6, (char**)p_arg6);
+        copy_in(n, arg6, (char**)p_arg6);
       else
         op_arg_set(n, arg6, &p_arg6 );
     }
 
     if (arg7.argtype == OP_ARG_DAT) {
       if (arg7.idx == OP_ALL)
-        copy_in<T7>(n, arg7, (char**)p_arg7);
+        copy_in(n, arg7, (char**)p_arg7);
       else
         op_arg_set(n, arg7, &p_arg7 );
     }
