@@ -32,7 +32,6 @@
 #define __OP_SEQ_H
 
 #include "op_lib_mat.h"
-#include <assert.h>
 #include <boost/type_traits.hpp>
 
 static inline void op_arg_set(int n, op_arg arg, char **p_arg){
@@ -44,21 +43,21 @@ static inline void op_arg_set(int n, op_arg arg, char **p_arg){
   *p_arg = arg.data + n2*arg.size;
 }
 
-template<class T>
 static inline void copy_in(int n, op_arg arg, char **p_arg) {
-  // Get the base type of the kernel argument (double, float, etc...)
-  // discarding any array extents or const modifiers.
-  typedef typename boost::remove_extent<T>::type tmp;
-  typedef typename boost::remove_const<tmp>::type value_type;
-  if ( arg.dat->dim == 1 ) {
-    // one-dim data, need to copy contents
-    for ( int i = 0; i < arg.map->dim; ++i )
-      ((value_type *)p_arg)[i] = ((value_type *)arg.data)[arg.map->map[i + n*arg.map->dim]];
-  } else {
-    // vector data, need to copy pointers
-    for (int i = 0; i < arg.map->dim; ++i)
-      p_arg[i] = arg.data + arg.map->map[i+n*arg.map->dim]*arg.size;
-  }
+  // vector data, need to copy pointers
+  for (int i = 0; i < arg.map->dim; ++i)
+    p_arg[i] = arg.data + arg.map->map[i+n*arg.map->dim]*arg.size;
+}
+
+op_itspace op_iteration_space(op_set set, int i, int j)
+{
+  op_itspace ret = (op_itspace)malloc(sizeof(op_itspace_core));
+  ret->set = set;
+  ret->ndims = 2;
+  ret->dims = (int *)malloc(ret->ndims * sizeof(int));
+  ret->dims[0] = i;
+  ret->dims[1] = j;
+  return ret;
 }
 
 op_itspace op_iteration_space(op_set set, int i, int j)
@@ -121,7 +120,7 @@ void op_par_loop ( void (*kernel)( T0* ),
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
@@ -195,65 +194,46 @@ void op_par_loop ( void (*kernel)( T0*, int, int ),
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     // call kernel function, passing in pointers to data
-    int ilower;
-    int iupper;
-    int jlower;
-    int jupper;
-    bool seen_op_mat = false;
+    int ilower = 0;
+    int iupper = itspace->dims[0];
+    int jlower = 0;
+    int jupper = itspace->dims[1];
     int idxs[2];
 
     int arg0idxs[2];
     if (arg0.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg0idxs[0] = 0;
       arg0idxs[1] = 1;
       if (arg0.idx == OP_ALL) {
-        ilt = 0;
         iut = arg0.map->dim;
       } else if (arg0.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg0.idx)-1];
-        if (seen_op_mat) {
-          arg0idxs[0] = op_i(arg0.idx) - 1;
-        }
+        arg0idxs[0] = op_i(arg0.idx) - 1;
       } else {
-        ilt = arg0.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 0, aborting\n");
+        exit(-1);
       }
       if (arg0.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg0.map2->dim;
       } else if (arg0.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg0.idx2)-1];
-        if (seen_op_mat) {
-          arg0idxs[1] = op_i(arg0.idx) - 1;
-        }
+        arg0idxs[1] = op_i(arg0.idx2) - 1;
       } else {
-        jlt = arg0.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 0, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
 
@@ -356,14 +336,14 @@ void op_par_loop ( void (*kernel)( T0*, T1* ),
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
@@ -403,8 +383,8 @@ void op_par_loop ( void (*kernel)( T0*, T1* ),
 
 template < class T0, class T1 >
 void op_par_loop ( void (*kernel)( T0*, T1*, int, int ),
-                   char const * name, op_itspace itspace,
-                   op_arg arg0, op_arg arg1 )
+  char const * name, op_itspace itspace,
+  op_arg arg0, op_arg arg1 )
 {
   char *p_arg0 = 0, *p_arg1 = 0;
   op_set set = itspace->set;
@@ -428,16 +408,16 @@ void op_par_loop ( void (*kernel)( T0*, T1*, int, int ),
 
   switch ( arg0.argtype ) {
     // Globals need their pointer only set once before the loop
-  case OP_ARG_GBL:
-    p_arg0 = arg0.data;
-    break;
-  case OP_ARG_DAT:
-    if (arg0.idx  == OP_ALL)
-      p_arg0 = (char *)malloc(arg0.map->dim*sizeof(T0));
-    break;
-  case OP_ARG_MAT:
-    p_arg0 = (char*) malloc(sizeof(T0));
-    break;
+    case OP_ARG_GBL:
+      p_arg0 = arg0.data;
+      break;
+    case OP_ARG_DAT:
+      if (arg0.idx  == OP_ALL)
+        p_arg0 = (char *)malloc(arg0.map->dim*sizeof(T0));
+      break;
+    case OP_ARG_MAT:
+      p_arg0 = (char*) malloc(sizeof(T0));
+      break;
   }
 
   switch ( arg1.argtype ) {
@@ -461,120 +441,83 @@ void op_par_loop ( void (*kernel)( T0*, T1*, int, int ),
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     // call kernel function, passing in pointers to data
-    int ilower;
-    int iupper;
-    int jlower;
-    int jupper;
-    bool seen_op_mat = false;
+    int ilower = 0;
+    int iupper = itspace->dims[0];
+    int jlower = 0;
+    int jupper = itspace->dims[1];
     int idxs[2];
 
     int arg0idxs[2];
     if (arg0.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg0idxs[0] = 0;
       arg0idxs[1] = 1;
       if (arg0.idx == OP_ALL) {
-        ilt = 0;
         iut = arg0.map->dim;
       } else if (arg0.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg0.idx)-1];
-        if (seen_op_mat) {
-          arg0idxs[0] = op_i(arg0.idx) - 1;
-        }
+        arg0idxs[0] = op_i(arg0.idx) - 1;
       } else {
-        ilt = arg0.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 0, aborting\n");
+        exit(-1);
       }
       if (arg0.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg0.map2->dim;
       } else if (arg0.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg0.idx2)-1];
-        if (seen_op_mat) {
-          arg0idxs[1] = op_i(arg0.idx) - 1;
-        }
+        arg0idxs[1] = op_i(arg0.idx2) - 1;
       } else {
-        jlt = arg0.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 0, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg1idxs[2];
     if (arg1.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg1idxs[0] = 0;
       arg1idxs[1] = 1;
       if (arg1.idx == OP_ALL) {
-        ilt = 0;
         iut = arg1.map->dim;
       } else if (arg1.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg1.idx)-1];
-        if (seen_op_mat) {
-          arg1idxs[0] = op_i(arg1.idx) - 1;
-        }
+        arg1idxs[0] = op_i(arg1.idx) - 1;
       } else {
-        ilt = arg1.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 1, aborting\n");
+        exit(-1);
       }
       if (arg1.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg1.map2->dim;
       } else if (arg1.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg1.idx2)-1];
-        if (seen_op_mat) {
-          arg1idxs[1] = op_i(arg1.idx) - 1;
-        }
+        arg1idxs[1] = op_i(arg1.idx2) - 1;
       } else {
-        jlt = arg1.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 1, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
 
@@ -709,21 +652,21 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2* ),
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
@@ -845,175 +788,120 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2*, int, int ),
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
 
     // call kernel function, passing in pointers to data
-    int ilower;
-    int iupper;
-    int jlower;
-    int jupper;
-    bool seen_op_mat = false;
+    int ilower = 0;
+    int iupper = itspace->dims[0];
+    int jlower = 0;
+    int jupper = itspace->dims[1];
     int idxs[2];
 
     int arg0idxs[2];
     if (arg0.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg0idxs[0] = 0;
       arg0idxs[1] = 1;
       if (arg0.idx == OP_ALL) {
-        ilt = 0;
         iut = arg0.map->dim;
       } else if (arg0.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg0.idx)-1];
-        if (seen_op_mat) {
-          arg0idxs[0] = op_i(arg0.idx) - 1;
-        }
+        arg0idxs[0] = op_i(arg0.idx) - 1;
       } else {
-        ilt = arg0.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 0, aborting\n");
+        exit(-1);
       }
       if (arg0.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg0.map2->dim;
       } else if (arg0.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg0.idx2)-1];
-        if (seen_op_mat) {
-          arg0idxs[1] = op_i(arg0.idx) - 1;
-        }
+        arg0idxs[1] = op_i(arg0.idx2) - 1;
       } else {
-        jlt = arg0.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 0, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg1idxs[2];
     if (arg1.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg1idxs[0] = 0;
       arg1idxs[1] = 1;
       if (arg1.idx == OP_ALL) {
-        ilt = 0;
         iut = arg1.map->dim;
       } else if (arg1.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg1.idx)-1];
-        if (seen_op_mat) {
-          arg1idxs[0] = op_i(arg1.idx) - 1;
-        }
+        arg1idxs[0] = op_i(arg1.idx) - 1;
       } else {
-        ilt = arg1.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 1, aborting\n");
+        exit(-1);
       }
       if (arg1.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg1.map2->dim;
       } else if (arg1.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg1.idx2)-1];
-        if (seen_op_mat) {
-          arg1idxs[1] = op_i(arg1.idx) - 1;
-        }
+        arg1idxs[1] = op_i(arg1.idx2) - 1;
       } else {
-        jlt = arg1.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 1, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg2idxs[2];
     if (arg2.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg2idxs[0] = 0;
       arg2idxs[1] = 1;
       if (arg2.idx == OP_ALL) {
-        ilt = 0;
         iut = arg2.map->dim;
       } else if (arg2.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg2.idx)-1];
-        if (seen_op_mat) {
-          arg2idxs[0] = op_i(arg2.idx) - 1;
-        }
+        arg2idxs[0] = op_i(arg2.idx) - 1;
       } else {
-        ilt = arg2.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 2, aborting\n");
+        exit(-1);
       }
       if (arg2.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg2.map2->dim;
       } else if (arg2.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg2.idx2)-1];
-        if (seen_op_mat) {
-          arg2idxs[1] = op_i(arg2.idx) - 1;
-        }
+        arg2idxs[1] = op_i(arg2.idx2) - 1;
       } else {
-        jlt = arg2.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 2, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
 
@@ -1180,28 +1068,28 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2*, T3* ),
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
 
     if (arg3.argtype == OP_ARG_DAT) {
       if (arg3.idx == OP_ALL)
-        copy_in<T3>(n, arg3, (char**)p_arg3);
+        copy_in(n, arg3, (char**)p_arg3);
       else
         op_arg_set(n, arg3, &p_arg3 );
     }
@@ -1347,230 +1235,157 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2*, T3*, int, int ),
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
 
     if (arg3.argtype == OP_ARG_DAT) {
       if (arg3.idx == OP_ALL)
-        copy_in<T3>(n, arg3, (char**)p_arg3);
+        copy_in(n, arg3, (char**)p_arg3);
       else
         op_arg_set(n, arg3, &p_arg3 );
     }
 
     // call kernel function, passing in pointers to data
-    int ilower;
-    int iupper;
-    int jlower;
-    int jupper;
-    bool seen_op_mat = false;
+    int ilower = 0;
+    int iupper = itspace->dims[0];
+    int jlower = 0;
+    int jupper = itspace->dims[1];
     int idxs[2];
 
     int arg0idxs[2];
     if (arg0.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg0idxs[0] = 0;
       arg0idxs[1] = 1;
       if (arg0.idx == OP_ALL) {
-        ilt = 0;
         iut = arg0.map->dim;
       } else if (arg0.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg0.idx)-1];
-        if (seen_op_mat) {
-          arg0idxs[0] = op_i(arg0.idx) - 1;
-        }
+        arg0idxs[0] = op_i(arg0.idx) - 1;
       } else {
-        ilt = arg0.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 0, aborting\n");
+        exit(-1);
       }
       if (arg0.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg0.map2->dim;
       } else if (arg0.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg0.idx2)-1];
-        if (seen_op_mat) {
-          arg0idxs[1] = op_i(arg0.idx) - 1;
-        }
+        arg0idxs[1] = op_i(arg0.idx2) - 1;
       } else {
-        jlt = arg0.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 0, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg1idxs[2];
     if (arg1.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg1idxs[0] = 0;
       arg1idxs[1] = 1;
       if (arg1.idx == OP_ALL) {
-        ilt = 0;
         iut = arg1.map->dim;
       } else if (arg1.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg1.idx)-1];
-        if (seen_op_mat) {
-          arg1idxs[0] = op_i(arg1.idx) - 1;
-        }
+        arg1idxs[0] = op_i(arg1.idx) - 1;
       } else {
-        ilt = arg1.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 1, aborting\n");
+        exit(-1);
       }
       if (arg1.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg1.map2->dim;
       } else if (arg1.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg1.idx2)-1];
-        if (seen_op_mat) {
-          arg1idxs[1] = op_i(arg1.idx) - 1;
-        }
+        arg1idxs[1] = op_i(arg1.idx2) - 1;
       } else {
-        jlt = arg1.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 1, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg2idxs[2];
     if (arg2.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg2idxs[0] = 0;
       arg2idxs[1] = 1;
       if (arg2.idx == OP_ALL) {
-        ilt = 0;
         iut = arg2.map->dim;
       } else if (arg2.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg2.idx)-1];
-        if (seen_op_mat) {
-          arg2idxs[0] = op_i(arg2.idx) - 1;
-        }
+        arg2idxs[0] = op_i(arg2.idx) - 1;
       } else {
-        ilt = arg2.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 2, aborting\n");
+        exit(-1);
       }
       if (arg2.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg2.map2->dim;
       } else if (arg2.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg2.idx2)-1];
-        if (seen_op_mat) {
-          arg2idxs[1] = op_i(arg2.idx) - 1;
-        }
+        arg2idxs[1] = op_i(arg2.idx2) - 1;
       } else {
-        jlt = arg2.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 2, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg3idxs[2];
     if (arg3.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg3idxs[0] = 0;
       arg3idxs[1] = 1;
       if (arg3.idx == OP_ALL) {
-        ilt = 0;
         iut = arg3.map->dim;
       } else if (arg3.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg3.idx)-1];
-        if (seen_op_mat) {
-          arg3idxs[0] = op_i(arg3.idx) - 1;
-        }
+        arg3idxs[0] = op_i(arg3.idx) - 1;
       } else {
-        ilt = arg3.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 3, aborting\n");
+        exit(-1);
       }
       if (arg3.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg3.map2->dim;
       } else if (arg3.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg3.idx2)-1];
-        if (seen_op_mat) {
-          arg3idxs[1] = op_i(arg3.idx) - 1;
-        }
+        arg3idxs[1] = op_i(arg3.idx2) - 1;
       } else {
-        jlt = arg3.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 3, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
 
@@ -1773,35 +1588,35 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2*, T3*,
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
 
     if (arg3.argtype == OP_ARG_DAT) {
       if (arg3.idx == OP_ALL)
-        copy_in<T3>(n, arg3, (char**)p_arg3);
+        copy_in(n, arg3, (char**)p_arg3);
       else
         op_arg_set(n, arg3, &p_arg3 );
     }
 
     if (arg4.argtype == OP_ARG_DAT) {
       if (arg4.idx == OP_ALL)
-        copy_in<T4>(n, arg4, (char**)p_arg4);
+        copy_in(n, arg4, (char**)p_arg4);
       else
         op_arg_set(n, arg4, &p_arg4 );
     }
@@ -1976,285 +1791,194 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2*, T3*,
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
 
     if (arg3.argtype == OP_ARG_DAT) {
       if (arg3.idx == OP_ALL)
-        copy_in<T3>(n, arg3, (char**)p_arg3);
+        copy_in(n, arg3, (char**)p_arg3);
       else
         op_arg_set(n, arg3, &p_arg3 );
     }
 
     if (arg4.argtype == OP_ARG_DAT) {
       if (arg4.idx == OP_ALL)
-        copy_in<T4>(n, arg4, (char**)p_arg4);
+        copy_in(n, arg4, (char**)p_arg4);
       else
         op_arg_set(n, arg4, &p_arg4 );
     }
 
     // call kernel function, passing in pointers to data
-    int ilower;
-    int iupper;
-    int jlower;
-    int jupper;
-    bool seen_op_mat = false;
+    int ilower = 0;
+    int iupper = itspace->dims[0];
+    int jlower = 0;
+    int jupper = itspace->dims[1];
     int idxs[2];
 
     int arg0idxs[2];
     if (arg0.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg0idxs[0] = 0;
       arg0idxs[1] = 1;
       if (arg0.idx == OP_ALL) {
-        ilt = 0;
         iut = arg0.map->dim;
       } else if (arg0.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg0.idx)-1];
-        if (seen_op_mat) {
-          arg0idxs[0] = op_i(arg0.idx) - 1;
-        }
+        arg0idxs[0] = op_i(arg0.idx) - 1;
       } else {
-        ilt = arg0.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 0, aborting\n");
+        exit(-1);
       }
       if (arg0.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg0.map2->dim;
       } else if (arg0.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg0.idx2)-1];
-        if (seen_op_mat) {
-          arg0idxs[1] = op_i(arg0.idx) - 1;
-        }
+        arg0idxs[1] = op_i(arg0.idx2) - 1;
       } else {
-        jlt = arg0.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 0, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg1idxs[2];
     if (arg1.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg1idxs[0] = 0;
       arg1idxs[1] = 1;
       if (arg1.idx == OP_ALL) {
-        ilt = 0;
         iut = arg1.map->dim;
       } else if (arg1.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg1.idx)-1];
-        if (seen_op_mat) {
-          arg1idxs[0] = op_i(arg1.idx) - 1;
-        }
+        arg1idxs[0] = op_i(arg1.idx) - 1;
       } else {
-        ilt = arg1.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 1, aborting\n");
+        exit(-1);
       }
       if (arg1.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg1.map2->dim;
       } else if (arg1.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg1.idx2)-1];
-        if (seen_op_mat) {
-          arg1idxs[1] = op_i(arg1.idx) - 1;
-        }
+        arg1idxs[1] = op_i(arg1.idx2) - 1;
       } else {
-        jlt = arg1.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 1, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg2idxs[2];
     if (arg2.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg2idxs[0] = 0;
       arg2idxs[1] = 1;
       if (arg2.idx == OP_ALL) {
-        ilt = 0;
         iut = arg2.map->dim;
       } else if (arg2.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg2.idx)-1];
-        if (seen_op_mat) {
-          arg2idxs[0] = op_i(arg2.idx) - 1;
-        }
+        arg2idxs[0] = op_i(arg2.idx) - 1;
       } else {
-        ilt = arg2.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 2, aborting\n");
+        exit(-1);
       }
       if (arg2.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg2.map2->dim;
       } else if (arg2.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg2.idx2)-1];
-        if (seen_op_mat) {
-          arg2idxs[1] = op_i(arg2.idx) - 1;
-        }
+        arg2idxs[1] = op_i(arg2.idx2) - 1;
       } else {
-        jlt = arg2.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 2, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg3idxs[2];
     if (arg3.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg3idxs[0] = 0;
       arg3idxs[1] = 1;
       if (arg3.idx == OP_ALL) {
-        ilt = 0;
         iut = arg3.map->dim;
       } else if (arg3.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg3.idx)-1];
-        if (seen_op_mat) {
-          arg3idxs[0] = op_i(arg3.idx) - 1;
-        }
+        arg3idxs[0] = op_i(arg3.idx) - 1;
       } else {
-        ilt = arg3.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 3, aborting\n");
+        exit(-1);
       }
       if (arg3.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg3.map2->dim;
       } else if (arg3.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg3.idx2)-1];
-        if (seen_op_mat) {
-          arg3idxs[1] = op_i(arg3.idx) - 1;
-        }
+        arg3idxs[1] = op_i(arg3.idx2) - 1;
       } else {
-        jlt = arg3.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 3, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg4idxs[2];
     if (arg4.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg4idxs[0] = 0;
       arg4idxs[1] = 1;
       if (arg4.idx == OP_ALL) {
-        ilt = 0;
         iut = arg4.map->dim;
       } else if (arg4.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg4.idx)-1];
-        if (seen_op_mat) {
-          arg4idxs[0] = op_i(arg4.idx) - 1;
-        }
+        arg4idxs[0] = op_i(arg4.idx) - 1;
       } else {
-        ilt = arg4.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 4, aborting\n");
+        exit(-1);
       }
       if (arg4.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg4.map2->dim;
       } else if (arg4.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg4.idx2)-1];
-        if (seen_op_mat) {
-          arg4idxs[1] = op_i(arg4.idx) - 1;
-        }
+        arg4idxs[1] = op_i(arg4.idx2) - 1;
       } else {
-        jlt = arg4.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 4, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
 
@@ -2490,42 +2214,42 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2*, T3*,
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
 
     if (arg3.argtype == OP_ARG_DAT) {
       if (arg3.idx == OP_ALL)
-        copy_in<T3>(n, arg3, (char**)p_arg3);
+        copy_in(n, arg3, (char**)p_arg3);
       else
         op_arg_set(n, arg3, &p_arg3 );
     }
 
     if (arg4.argtype == OP_ARG_DAT) {
       if (arg4.idx == OP_ALL)
-        copy_in<T4>(n, arg4, (char**)p_arg4);
+        copy_in(n, arg4, (char**)p_arg4);
       else
         op_arg_set(n, arg4, &p_arg4 );
     }
 
     if (arg5.argtype == OP_ARG_DAT) {
       if (arg5.idx == OP_ALL)
-        copy_in<T5>(n, arg5, (char**)p_arg5);
+        copy_in(n, arg5, (char**)p_arg5);
       else
         op_arg_set(n, arg5, &p_arg5 );
     }
@@ -2724,340 +2448,231 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2*, T3*,
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
 
     if (arg3.argtype == OP_ARG_DAT) {
       if (arg3.idx == OP_ALL)
-        copy_in<T3>(n, arg3, (char**)p_arg3);
+        copy_in(n, arg3, (char**)p_arg3);
       else
         op_arg_set(n, arg3, &p_arg3 );
     }
 
     if (arg4.argtype == OP_ARG_DAT) {
       if (arg4.idx == OP_ALL)
-        copy_in<T4>(n, arg4, (char**)p_arg4);
+        copy_in(n, arg4, (char**)p_arg4);
       else
         op_arg_set(n, arg4, &p_arg4 );
     }
 
     if (arg5.argtype == OP_ARG_DAT) {
       if (arg5.idx == OP_ALL)
-        copy_in<T5>(n, arg5, (char**)p_arg5);
+        copy_in(n, arg5, (char**)p_arg5);
       else
         op_arg_set(n, arg5, &p_arg5 );
     }
 
     // call kernel function, passing in pointers to data
-    int ilower;
-    int iupper;
-    int jlower;
-    int jupper;
-    bool seen_op_mat = false;
+    int ilower = 0;
+    int iupper = itspace->dims[0];
+    int jlower = 0;
+    int jupper = itspace->dims[1];
     int idxs[2];
 
     int arg0idxs[2];
     if (arg0.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg0idxs[0] = 0;
       arg0idxs[1] = 1;
       if (arg0.idx == OP_ALL) {
-        ilt = 0;
         iut = arg0.map->dim;
       } else if (arg0.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg0.idx)-1];
-        if (seen_op_mat) {
-          arg0idxs[0] = op_i(arg0.idx) - 1;
-        }
+        arg0idxs[0] = op_i(arg0.idx) - 1;
       } else {
-        ilt = arg0.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 0, aborting\n");
+        exit(-1);
       }
       if (arg0.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg0.map2->dim;
       } else if (arg0.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg0.idx2)-1];
-        if (seen_op_mat) {
-          arg0idxs[1] = op_i(arg0.idx) - 1;
-        }
+        arg0idxs[1] = op_i(arg0.idx2) - 1;
       } else {
-        jlt = arg0.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 0, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg1idxs[2];
     if (arg1.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg1idxs[0] = 0;
       arg1idxs[1] = 1;
       if (arg1.idx == OP_ALL) {
-        ilt = 0;
         iut = arg1.map->dim;
       } else if (arg1.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg1.idx)-1];
-        if (seen_op_mat) {
-          arg1idxs[0] = op_i(arg1.idx) - 1;
-        }
+        arg1idxs[0] = op_i(arg1.idx) - 1;
       } else {
-        ilt = arg1.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 1, aborting\n");
+        exit(-1);
       }
       if (arg1.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg1.map2->dim;
       } else if (arg1.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg1.idx2)-1];
-        if (seen_op_mat) {
-          arg1idxs[1] = op_i(arg1.idx) - 1;
-        }
+        arg1idxs[1] = op_i(arg1.idx2) - 1;
       } else {
-        jlt = arg1.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 1, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg2idxs[2];
     if (arg2.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg2idxs[0] = 0;
       arg2idxs[1] = 1;
       if (arg2.idx == OP_ALL) {
-        ilt = 0;
         iut = arg2.map->dim;
       } else if (arg2.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg2.idx)-1];
-        if (seen_op_mat) {
-          arg2idxs[0] = op_i(arg2.idx) - 1;
-        }
+        arg2idxs[0] = op_i(arg2.idx) - 1;
       } else {
-        ilt = arg2.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 2, aborting\n");
+        exit(-1);
       }
       if (arg2.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg2.map2->dim;
       } else if (arg2.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg2.idx2)-1];
-        if (seen_op_mat) {
-          arg2idxs[1] = op_i(arg2.idx) - 1;
-        }
+        arg2idxs[1] = op_i(arg2.idx2) - 1;
       } else {
-        jlt = arg2.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 2, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg3idxs[2];
     if (arg3.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg3idxs[0] = 0;
       arg3idxs[1] = 1;
       if (arg3.idx == OP_ALL) {
-        ilt = 0;
         iut = arg3.map->dim;
       } else if (arg3.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg3.idx)-1];
-        if (seen_op_mat) {
-          arg3idxs[0] = op_i(arg3.idx) - 1;
-        }
+        arg3idxs[0] = op_i(arg3.idx) - 1;
       } else {
-        ilt = arg3.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 3, aborting\n");
+        exit(-1);
       }
       if (arg3.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg3.map2->dim;
       } else if (arg3.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg3.idx2)-1];
-        if (seen_op_mat) {
-          arg3idxs[1] = op_i(arg3.idx) - 1;
-        }
+        arg3idxs[1] = op_i(arg3.idx2) - 1;
       } else {
-        jlt = arg3.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 3, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg4idxs[2];
     if (arg4.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg4idxs[0] = 0;
       arg4idxs[1] = 1;
       if (arg4.idx == OP_ALL) {
-        ilt = 0;
         iut = arg4.map->dim;
       } else if (arg4.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg4.idx)-1];
-        if (seen_op_mat) {
-          arg4idxs[0] = op_i(arg4.idx) - 1;
-        }
+        arg4idxs[0] = op_i(arg4.idx) - 1;
       } else {
-        ilt = arg4.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 4, aborting\n");
+        exit(-1);
       }
       if (arg4.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg4.map2->dim;
       } else if (arg4.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg4.idx2)-1];
-        if (seen_op_mat) {
-          arg4idxs[1] = op_i(arg4.idx) - 1;
-        }
+        arg4idxs[1] = op_i(arg4.idx2) - 1;
       } else {
-        jlt = arg4.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 4, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg5idxs[2];
     if (arg5.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg5idxs[0] = 0;
       arg5idxs[1] = 1;
       if (arg5.idx == OP_ALL) {
-        ilt = 0;
         iut = arg5.map->dim;
       } else if (arg5.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg5.idx)-1];
-        if (seen_op_mat) {
-          arg5idxs[0] = op_i(arg5.idx) - 1;
-        }
+        arg5idxs[0] = op_i(arg5.idx) - 1;
       } else {
-        ilt = arg5.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 5, aborting\n");
+        exit(-1);
       }
       if (arg5.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg5.map2->dim;
       } else if (arg5.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg5.idx2)-1];
-        if (seen_op_mat) {
-          arg5idxs[1] = op_i(arg5.idx) - 1;
-        }
+        arg5idxs[1] = op_i(arg5.idx2) - 1;
       } else {
-        jlt = arg5.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 5, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
 
@@ -3325,49 +2940,49 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2*, T3*,
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
 
     if (arg3.argtype == OP_ARG_DAT) {
       if (arg3.idx == OP_ALL)
-        copy_in<T3>(n, arg3, (char**)p_arg3);
+        copy_in(n, arg3, (char**)p_arg3);
       else
         op_arg_set(n, arg3, &p_arg3 );
     }
 
     if (arg4.argtype == OP_ARG_DAT) {
       if (arg4.idx == OP_ALL)
-        copy_in<T4>(n, arg4, (char**)p_arg4);
+        copy_in(n, arg4, (char**)p_arg4);
       else
         op_arg_set(n, arg4, &p_arg4 );
     }
 
     if (arg5.argtype == OP_ARG_DAT) {
       if (arg5.idx == OP_ALL)
-        copy_in<T5>(n, arg5, (char**)p_arg5);
+        copy_in(n, arg5, (char**)p_arg5);
       else
         op_arg_set(n, arg5, &p_arg5 );
     }
 
     if (arg6.argtype == OP_ARG_DAT) {
       if (arg6.idx == OP_ALL)
-        copy_in<T6>(n, arg6, (char**)p_arg6);
+        copy_in(n, arg6, (char**)p_arg6);
       else
         op_arg_set(n, arg6, &p_arg6 );
     }
@@ -3590,395 +3205,268 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2*, T3*,
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
 
     if (arg3.argtype == OP_ARG_DAT) {
       if (arg3.idx == OP_ALL)
-        copy_in<T3>(n, arg3, (char**)p_arg3);
+        copy_in(n, arg3, (char**)p_arg3);
       else
         op_arg_set(n, arg3, &p_arg3 );
     }
 
     if (arg4.argtype == OP_ARG_DAT) {
       if (arg4.idx == OP_ALL)
-        copy_in<T4>(n, arg4, (char**)p_arg4);
+        copy_in(n, arg4, (char**)p_arg4);
       else
         op_arg_set(n, arg4, &p_arg4 );
     }
 
     if (arg5.argtype == OP_ARG_DAT) {
       if (arg5.idx == OP_ALL)
-        copy_in<T5>(n, arg5, (char**)p_arg5);
+        copy_in(n, arg5, (char**)p_arg5);
       else
         op_arg_set(n, arg5, &p_arg5 );
     }
 
     if (arg6.argtype == OP_ARG_DAT) {
       if (arg6.idx == OP_ALL)
-        copy_in<T6>(n, arg6, (char**)p_arg6);
+        copy_in(n, arg6, (char**)p_arg6);
       else
         op_arg_set(n, arg6, &p_arg6 );
     }
 
     // call kernel function, passing in pointers to data
-    int ilower;
-    int iupper;
-    int jlower;
-    int jupper;
-    bool seen_op_mat = false;
+    int ilower = 0;
+    int iupper = itspace->dims[0];
+    int jlower = 0;
+    int jupper = itspace->dims[1];
     int idxs[2];
 
     int arg0idxs[2];
     if (arg0.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg0idxs[0] = 0;
       arg0idxs[1] = 1;
       if (arg0.idx == OP_ALL) {
-        ilt = 0;
         iut = arg0.map->dim;
       } else if (arg0.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg0.idx)-1];
-        if (seen_op_mat) {
-          arg0idxs[0] = op_i(arg0.idx) - 1;
-        }
+        arg0idxs[0] = op_i(arg0.idx) - 1;
       } else {
-        ilt = arg0.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 0, aborting\n");
+        exit(-1);
       }
       if (arg0.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg0.map2->dim;
       } else if (arg0.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg0.idx2)-1];
-        if (seen_op_mat) {
-          arg0idxs[1] = op_i(arg0.idx) - 1;
-        }
+        arg0idxs[1] = op_i(arg0.idx2) - 1;
       } else {
-        jlt = arg0.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 0, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg1idxs[2];
     if (arg1.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg1idxs[0] = 0;
       arg1idxs[1] = 1;
       if (arg1.idx == OP_ALL) {
-        ilt = 0;
         iut = arg1.map->dim;
       } else if (arg1.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg1.idx)-1];
-        if (seen_op_mat) {
-          arg1idxs[0] = op_i(arg1.idx) - 1;
-        }
+        arg1idxs[0] = op_i(arg1.idx) - 1;
       } else {
-        ilt = arg1.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 1, aborting\n");
+        exit(-1);
       }
       if (arg1.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg1.map2->dim;
       } else if (arg1.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg1.idx2)-1];
-        if (seen_op_mat) {
-          arg1idxs[1] = op_i(arg1.idx) - 1;
-        }
+        arg1idxs[1] = op_i(arg1.idx2) - 1;
       } else {
-        jlt = arg1.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 1, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg2idxs[2];
     if (arg2.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg2idxs[0] = 0;
       arg2idxs[1] = 1;
       if (arg2.idx == OP_ALL) {
-        ilt = 0;
         iut = arg2.map->dim;
       } else if (arg2.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg2.idx)-1];
-        if (seen_op_mat) {
-          arg2idxs[0] = op_i(arg2.idx) - 1;
-        }
+        arg2idxs[0] = op_i(arg2.idx) - 1;
       } else {
-        ilt = arg2.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 2, aborting\n");
+        exit(-1);
       }
       if (arg2.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg2.map2->dim;
       } else if (arg2.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg2.idx2)-1];
-        if (seen_op_mat) {
-          arg2idxs[1] = op_i(arg2.idx) - 1;
-        }
+        arg2idxs[1] = op_i(arg2.idx2) - 1;
       } else {
-        jlt = arg2.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 2, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg3idxs[2];
     if (arg3.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg3idxs[0] = 0;
       arg3idxs[1] = 1;
       if (arg3.idx == OP_ALL) {
-        ilt = 0;
         iut = arg3.map->dim;
       } else if (arg3.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg3.idx)-1];
-        if (seen_op_mat) {
-          arg3idxs[0] = op_i(arg3.idx) - 1;
-        }
+        arg3idxs[0] = op_i(arg3.idx) - 1;
       } else {
-        ilt = arg3.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 3, aborting\n");
+        exit(-1);
       }
       if (arg3.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg3.map2->dim;
       } else if (arg3.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg3.idx2)-1];
-        if (seen_op_mat) {
-          arg3idxs[1] = op_i(arg3.idx) - 1;
-        }
+        arg3idxs[1] = op_i(arg3.idx2) - 1;
       } else {
-        jlt = arg3.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 3, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg4idxs[2];
     if (arg4.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg4idxs[0] = 0;
       arg4idxs[1] = 1;
       if (arg4.idx == OP_ALL) {
-        ilt = 0;
         iut = arg4.map->dim;
       } else if (arg4.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg4.idx)-1];
-        if (seen_op_mat) {
-          arg4idxs[0] = op_i(arg4.idx) - 1;
-        }
+        arg4idxs[0] = op_i(arg4.idx) - 1;
       } else {
-        ilt = arg4.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 4, aborting\n");
+        exit(-1);
       }
       if (arg4.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg4.map2->dim;
       } else if (arg4.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg4.idx2)-1];
-        if (seen_op_mat) {
-          arg4idxs[1] = op_i(arg4.idx) - 1;
-        }
+        arg4idxs[1] = op_i(arg4.idx2) - 1;
       } else {
-        jlt = arg4.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 4, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg5idxs[2];
     if (arg5.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg5idxs[0] = 0;
       arg5idxs[1] = 1;
       if (arg5.idx == OP_ALL) {
-        ilt = 0;
         iut = arg5.map->dim;
       } else if (arg5.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg5.idx)-1];
-        if (seen_op_mat) {
-          arg5idxs[0] = op_i(arg5.idx) - 1;
-        }
+        arg5idxs[0] = op_i(arg5.idx) - 1;
       } else {
-        ilt = arg5.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 5, aborting\n");
+        exit(-1);
       }
       if (arg5.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg5.map2->dim;
       } else if (arg5.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg5.idx2)-1];
-        if (seen_op_mat) {
-          arg5idxs[1] = op_i(arg5.idx) - 1;
-        }
+        arg5idxs[1] = op_i(arg5.idx2) - 1;
       } else {
-        jlt = arg5.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 5, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg6idxs[2];
     if (arg6.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg6idxs[0] = 0;
       arg6idxs[1] = 1;
       if (arg6.idx == OP_ALL) {
-        ilt = 0;
         iut = arg6.map->dim;
       } else if (arg6.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg6.idx)-1];
-        if (seen_op_mat) {
-          arg6idxs[0] = op_i(arg6.idx) - 1;
-        }
+        arg6idxs[0] = op_i(arg6.idx) - 1;
       } else {
-        ilt = arg6.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 6, aborting\n");
+        exit(-1);
       }
       if (arg6.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg6.map2->dim;
       } else if (arg6.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg6.idx2)-1];
-        if (seen_op_mat) {
-          arg6idxs[1] = op_i(arg6.idx) - 1;
-        }
+        arg6idxs[1] = op_i(arg6.idx2) - 1;
       } else {
-        jlt = arg6.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 6, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
 
@@ -4278,56 +3766,56 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2*, T3*,
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
 
     if (arg3.argtype == OP_ARG_DAT) {
       if (arg3.idx == OP_ALL)
-        copy_in<T3>(n, arg3, (char**)p_arg3);
+        copy_in(n, arg3, (char**)p_arg3);
       else
         op_arg_set(n, arg3, &p_arg3 );
     }
 
     if (arg4.argtype == OP_ARG_DAT) {
       if (arg4.idx == OP_ALL)
-        copy_in<T4>(n, arg4, (char**)p_arg4);
+        copy_in(n, arg4, (char**)p_arg4);
       else
         op_arg_set(n, arg4, &p_arg4 );
     }
 
     if (arg5.argtype == OP_ARG_DAT) {
       if (arg5.idx == OP_ALL)
-        copy_in<T5>(n, arg5, (char**)p_arg5);
+        copy_in(n, arg5, (char**)p_arg5);
       else
         op_arg_set(n, arg5, &p_arg5 );
     }
 
     if (arg6.argtype == OP_ARG_DAT) {
       if (arg6.idx == OP_ALL)
-        copy_in<T6>(n, arg6, (char**)p_arg6);
+        copy_in(n, arg6, (char**)p_arg6);
       else
         op_arg_set(n, arg6, &p_arg6 );
     }
 
     if (arg7.argtype == OP_ARG_DAT) {
       if (arg7.idx == OP_ALL)
-        copy_in<T7>(n, arg7, (char**)p_arg7);
+        copy_in(n, arg7, (char**)p_arg7);
       else
         op_arg_set(n, arg7, &p_arg7 );
     }
@@ -4574,450 +4062,305 @@ void op_par_loop ( void (*kernel)( T0*, T1*, T2*, T3*,
 
     if (arg0.argtype == OP_ARG_DAT) {
       if (arg0.idx == OP_ALL)
-        copy_in<T0>(n, arg0, (char**)p_arg0);
+        copy_in(n, arg0, (char**)p_arg0);
       else
         op_arg_set(n, arg0, &p_arg0 );
     }
 
     if (arg1.argtype == OP_ARG_DAT) {
       if (arg1.idx == OP_ALL)
-        copy_in<T1>(n, arg1, (char**)p_arg1);
+        copy_in(n, arg1, (char**)p_arg1);
       else
         op_arg_set(n, arg1, &p_arg1 );
     }
 
     if (arg2.argtype == OP_ARG_DAT) {
       if (arg2.idx == OP_ALL)
-        copy_in<T2>(n, arg2, (char**)p_arg2);
+        copy_in(n, arg2, (char**)p_arg2);
       else
         op_arg_set(n, arg2, &p_arg2 );
     }
 
     if (arg3.argtype == OP_ARG_DAT) {
       if (arg3.idx == OP_ALL)
-        copy_in<T3>(n, arg3, (char**)p_arg3);
+        copy_in(n, arg3, (char**)p_arg3);
       else
         op_arg_set(n, arg3, &p_arg3 );
     }
 
     if (arg4.argtype == OP_ARG_DAT) {
       if (arg4.idx == OP_ALL)
-        copy_in<T4>(n, arg4, (char**)p_arg4);
+        copy_in(n, arg4, (char**)p_arg4);
       else
         op_arg_set(n, arg4, &p_arg4 );
     }
 
     if (arg5.argtype == OP_ARG_DAT) {
       if (arg5.idx == OP_ALL)
-        copy_in<T5>(n, arg5, (char**)p_arg5);
+        copy_in(n, arg5, (char**)p_arg5);
       else
         op_arg_set(n, arg5, &p_arg5 );
     }
 
     if (arg6.argtype == OP_ARG_DAT) {
       if (arg6.idx == OP_ALL)
-        copy_in<T6>(n, arg6, (char**)p_arg6);
+        copy_in(n, arg6, (char**)p_arg6);
       else
         op_arg_set(n, arg6, &p_arg6 );
     }
 
     if (arg7.argtype == OP_ARG_DAT) {
       if (arg7.idx == OP_ALL)
-        copy_in<T7>(n, arg7, (char**)p_arg7);
+        copy_in(n, arg7, (char**)p_arg7);
       else
         op_arg_set(n, arg7, &p_arg7 );
     }
 
     // call kernel function, passing in pointers to data
-    int ilower;
-    int iupper;
-    int jlower;
-    int jupper;
-    bool seen_op_mat = false;
+    int ilower = 0;
+    int iupper = itspace->dims[0];
+    int jlower = 0;
+    int jupper = itspace->dims[1];
     int idxs[2];
 
     int arg0idxs[2];
     if (arg0.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg0idxs[0] = 0;
       arg0idxs[1] = 1;
       if (arg0.idx == OP_ALL) {
-        ilt = 0;
         iut = arg0.map->dim;
       } else if (arg0.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg0.idx)-1];
-        if (seen_op_mat) {
-          arg0idxs[0] = op_i(arg0.idx) - 1;
-        }
+        arg0idxs[0] = op_i(arg0.idx) - 1;
       } else {
-        ilt = arg0.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 0, aborting\n");
+        exit(-1);
       }
       if (arg0.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg0.map2->dim;
       } else if (arg0.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg0.idx2)-1];
-        if (seen_op_mat) {
-          arg0idxs[1] = op_i(arg0.idx) - 1;
-        }
+        arg0idxs[1] = op_i(arg0.idx2) - 1;
       } else {
-        jlt = arg0.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 0, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg1idxs[2];
     if (arg1.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg1idxs[0] = 0;
       arg1idxs[1] = 1;
       if (arg1.idx == OP_ALL) {
-        ilt = 0;
         iut = arg1.map->dim;
       } else if (arg1.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg1.idx)-1];
-        if (seen_op_mat) {
-          arg1idxs[0] = op_i(arg1.idx) - 1;
-        }
+        arg1idxs[0] = op_i(arg1.idx) - 1;
       } else {
-        ilt = arg1.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 1, aborting\n");
+        exit(-1);
       }
       if (arg1.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg1.map2->dim;
       } else if (arg1.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg1.idx2)-1];
-        if (seen_op_mat) {
-          arg1idxs[1] = op_i(arg1.idx) - 1;
-        }
+        arg1idxs[1] = op_i(arg1.idx2) - 1;
       } else {
-        jlt = arg1.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 1, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg2idxs[2];
     if (arg2.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg2idxs[0] = 0;
       arg2idxs[1] = 1;
       if (arg2.idx == OP_ALL) {
-        ilt = 0;
         iut = arg2.map->dim;
       } else if (arg2.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg2.idx)-1];
-        if (seen_op_mat) {
-          arg2idxs[0] = op_i(arg2.idx) - 1;
-        }
+        arg2idxs[0] = op_i(arg2.idx) - 1;
       } else {
-        ilt = arg2.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 2, aborting\n");
+        exit(-1);
       }
       if (arg2.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg2.map2->dim;
       } else if (arg2.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg2.idx2)-1];
-        if (seen_op_mat) {
-          arg2idxs[1] = op_i(arg2.idx) - 1;
-        }
+        arg2idxs[1] = op_i(arg2.idx2) - 1;
       } else {
-        jlt = arg2.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 2, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg3idxs[2];
     if (arg3.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg3idxs[0] = 0;
       arg3idxs[1] = 1;
       if (arg3.idx == OP_ALL) {
-        ilt = 0;
         iut = arg3.map->dim;
       } else if (arg3.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg3.idx)-1];
-        if (seen_op_mat) {
-          arg3idxs[0] = op_i(arg3.idx) - 1;
-        }
+        arg3idxs[0] = op_i(arg3.idx) - 1;
       } else {
-        ilt = arg3.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 3, aborting\n");
+        exit(-1);
       }
       if (arg3.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg3.map2->dim;
       } else if (arg3.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg3.idx2)-1];
-        if (seen_op_mat) {
-          arg3idxs[1] = op_i(arg3.idx) - 1;
-        }
+        arg3idxs[1] = op_i(arg3.idx2) - 1;
       } else {
-        jlt = arg3.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 3, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg4idxs[2];
     if (arg4.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg4idxs[0] = 0;
       arg4idxs[1] = 1;
       if (arg4.idx == OP_ALL) {
-        ilt = 0;
         iut = arg4.map->dim;
       } else if (arg4.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg4.idx)-1];
-        if (seen_op_mat) {
-          arg4idxs[0] = op_i(arg4.idx) - 1;
-        }
+        arg4idxs[0] = op_i(arg4.idx) - 1;
       } else {
-        ilt = arg4.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 4, aborting\n");
+        exit(-1);
       }
       if (arg4.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg4.map2->dim;
       } else if (arg4.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg4.idx2)-1];
-        if (seen_op_mat) {
-          arg4idxs[1] = op_i(arg4.idx) - 1;
-        }
+        arg4idxs[1] = op_i(arg4.idx2) - 1;
       } else {
-        jlt = arg4.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 4, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg5idxs[2];
     if (arg5.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg5idxs[0] = 0;
       arg5idxs[1] = 1;
       if (arg5.idx == OP_ALL) {
-        ilt = 0;
         iut = arg5.map->dim;
       } else if (arg5.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg5.idx)-1];
-        if (seen_op_mat) {
-          arg5idxs[0] = op_i(arg5.idx) - 1;
-        }
+        arg5idxs[0] = op_i(arg5.idx) - 1;
       } else {
-        ilt = arg5.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 5, aborting\n");
+        exit(-1);
       }
       if (arg5.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg5.map2->dim;
       } else if (arg5.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg5.idx2)-1];
-        if (seen_op_mat) {
-          arg5idxs[1] = op_i(arg5.idx) - 1;
-        }
+        arg5idxs[1] = op_i(arg5.idx2) - 1;
       } else {
-        jlt = arg5.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 5, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg6idxs[2];
     if (arg6.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg6idxs[0] = 0;
       arg6idxs[1] = 1;
       if (arg6.idx == OP_ALL) {
-        ilt = 0;
         iut = arg6.map->dim;
       } else if (arg6.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg6.idx)-1];
-        if (seen_op_mat) {
-          arg6idxs[0] = op_i(arg6.idx) - 1;
-        }
+        arg6idxs[0] = op_i(arg6.idx) - 1;
       } else {
-        ilt = arg6.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 6, aborting\n");
+        exit(-1);
       }
       if (arg6.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg6.map2->dim;
       } else if (arg6.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg6.idx2)-1];
-        if (seen_op_mat) {
-          arg6idxs[1] = op_i(arg6.idx) - 1;
-        }
+        arg6idxs[1] = op_i(arg6.idx2) - 1;
       } else {
-        jlt = arg6.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 6, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
     int arg7idxs[2];
     if (arg7.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg7idxs[0] = 0;
       arg7idxs[1] = 1;
       if (arg7.idx == OP_ALL) {
-        ilt = 0;
         iut = arg7.map->dim;
       } else if (arg7.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg7.idx)-1];
-        if (seen_op_mat) {
-          arg7idxs[0] = op_i(arg7.idx) - 1;
-        }
+        arg7idxs[0] = op_i(arg7.idx) - 1;
       } else {
-        ilt = arg7.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 7, aborting\n");
+        exit(-1);
       }
       if (arg7.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg7.map2->dim;
       } else if (arg7.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg7.idx2)-1];
-        if (seen_op_mat) {
-          arg7idxs[1] = op_i(arg7.idx) - 1;
-        }
+        arg7idxs[1] = op_i(arg7.idx2) - 1;
       } else {
-        jlt = arg7.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg 7, aborting\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 
 

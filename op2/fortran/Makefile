@@ -25,26 +25,25 @@ F_OP2_BACKEND = $(F_OP2_SRC)/backend
 # compiler settings
 #
 
-OP2_COMPILER=pgi
+# Default to PGI compiler
+OP2_COMPILER ?= pgi
 
 ifeq ($(OP2_COMPILER),gnu)
   CC    = gcc
-  CFLAGS = -g -O3 -std=c99 -Wall -Werror -fPIC -pedantic -pipe
+  CFLAGS =  -std=c99 -Wall -Werror -fPIC -pedantic -pipe
   FC = gfortran
-  FFLAGS = -J$(F_OP2_MOD) -O4 -Wall -Werror -pedantic -pipe
+  FFLAGS = -J$(F_OP2_MOD) -Wall -Werror -pedantic -pipe
   ALLTARGETS = f_reference f_openmp
 else
 ifeq ($(OP2_COMPILER),pgi)
-  CC        = icc
-  CFLAGS    = -g -O3 -std=c99 -Wall -Werror -vec-report -xSSE4.2
-  FC        = ifort
-  FFLAGS    = -module $(F_OP2_MOD)/intel -g -O3 -vec-report -xSSE4.2
-  #PGCC      = pgcc
-  #PGCFLAGS  = -c99 -fastsse -Mcuda=cuda4.0 -Minline=levels:10 -Mvect -Minfo -DNDEBUG
+  CC        = icc -O3
+  CFLAGS    = -std=c99 -Wall -Werror
+  FC        = ifort -O3
+  FFLAGS    = -module $(F_OP2_MOD)/intel
   PGCC      = nvcc
-  PGCFLAGS  = -Xcompiler="-g -O3 -std=c99 -Wall -fPIC -pedantic -pipe"
+  PGCFLAGS  = -Xcompiler="-O4 -std=c99 -Wall -fPIC -pedantic -pipe"
   PGFC      = pgfortran
-  PGFFLAGS  = -module $(F_OP2_MOD)/pgi -Mcuda=cuda4.0 -Minform=inform -O4 -DOP2_WITH_CUDAFOR
+  PGFFLAGS  = -module $(F_OP2_MOD)/pgi -Mcuda=cuda4.0 -Minform=inform -DOP2_WITH_CUDAFOR
   ALLTARGETS = f_reference f_openmp f_cuda
 else
 print:
@@ -147,6 +146,29 @@ f_rt_support: $(C_OP2_INC)/op_rt_support.h $(C_OP2_SRC)/core/op_rt_support.c \
 				$(F_OP2_OBJ)/op2_for_rt_wrappers.o \
 				$(F_OP2_OBJ)/op2_for_rt_support.o	\
 				$(F_OP2_OBJ)/op2_for_rt_wrappers_cuda.o
+
+# the following is used when the application mixes openmp loops with reference loops
+f_openmp_reference: f_openmp_rt_support $(C_OP2_INC)/op_lib_core.h $(C_OP2_SRC)/core/op_lib_core.c \
+		$(C_OP2_SRC)/openmp/op_openmp_decl.c \
+		$(F_OP2_SRC)/backend/op2_for_declarations.F90 \
+		$(F_OP2_SRC)/backend/op2_for_reference.F90 \
+		$(F_OP2_SRC)/backend/op2_C_reference.c
+		$(CC) $(CFLAGS) -I$(C_OP2_INC) -c $(C_OP2_SRC)/core/op_lib_core.c -o $(F_OP2_OBJ)/op_lib_core.o
+		$(CC) $(CFLAGS) -I$(C_OP2_INC) -c $(F_OP2_SRC)/backend/op2_for_C_wrappers.c -o $(F_OP2_OBJ)/op2_for_C_wrappers.o
+		$(CC) $(CFLAGS) -I$(C_OP2_INC) -c $(C_OP2_SRC)/openmp/op_openmp_decl.c -o $(F_OP2_OBJ)/op_openmp_decl.o
+		$(FC) $(FFLAGS) -c $(F_OP2_SRC)/backend/op2_for_declarations.F90 -o $(F_OP2_OBJ)/op2_for_declarations.o
+		$(shell cp $(F_OP2_SRC)/backend/op2_for_reference.F90 $(F_OP2_SRC)/backend/op2_for_reference.c)
+		$(shell cpp $(F_OP2_SRC)/backend/op2_for_reference.c | sed s/##//g | sed s/\"@\"//g | tr "@" "\\n" > $(F_OP2_SRC)/backend/op2_cpp_reference.F90)
+		$(FC) -c $(FFLAGS) $(F_OP2_SRC)/backend/op2_cpp_reference.F90 -o $(F_OP2_OBJ)/op2_for_reference.o
+		$(CC) $(CFLAGS) -I$(C_OP2_INC) -c $(F_OP2_SRC)/backend/op2_C_reference.c -o $(F_OP2_OBJ)/op2_C_reference.o
+		$(CC) $(CFLAGS) -I$(C_OP2_INC) -c $(F_OP2_SRC)/backend/op2_C_reference.c -o $(F_OP2_OBJ)/op2_C_reference.o
+		ar -r $(F_OP2_LIB)/libop2_for_openmp_reference.a \
+					$(F_OP2_OBJ)/op2_for_reference.o \
+					$(F_OP2_OBJ)/op2_C_reference.o \
+					$(F_OP2_OBJ)/op2_for_C_wrappers.o \
+					$(F_OP2_OBJ)/op_lib_core.o \
+					$(F_OP2_OBJ)/op_openmp_decl.o \
+					$(F_OP2_OBJ)/op2_for_declarations.o
 
 clean:
 	-rm -if $(F_OP2_OBJ)/*.o

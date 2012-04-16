@@ -39,7 +39,6 @@ header_h = """/*
 #define __OP_SEQ_H
 
 #include "op_lib_mat.h"
-#include <assert.h>
 #include <boost/type_traits.hpp>
 
 static inline void op_arg_set(int n, op_arg arg, char **p_arg){
@@ -51,21 +50,10 @@ static inline void op_arg_set(int n, op_arg arg, char **p_arg){
   *p_arg = arg.data + n2*arg.size;
 }
 
-template<class T>
 static inline void copy_in(int n, op_arg arg, char **p_arg) {
-  // Get the base type of the kernel argument (double, float, etc...)
-  // discarding any array extents or const modifiers.
-  typedef typename boost::remove_extent<T>::type tmp;
-  typedef typename boost::remove_const<tmp>::type value_type;
-  if ( arg.dat->dim == 1 ) {
-    // one-dim data, need to copy contents
-    for ( int i = 0; i < arg.map->dim; ++i )
-      ((value_type *)p_arg)[i] = ((value_type *)arg.data)[arg.map->map[i + n*arg.map->dim]];
-  } else {
-    // vector data, need to copy pointers
-    for (int i = 0; i < arg.map->dim; ++i)
-      p_arg[i] = arg.data + arg.map->map[i+n*arg.map->dim]*arg.size;
-  }
+  // vector data, need to copy pointers
+  for (int i = 0; i < arg.map->dim; ++i)
+    p_arg[i] = arg.data + arg.map->map[i+n*arg.map->dim]*arg.size;
 }
 
 op_itspace op_iteration_space(op_set set, int i, int j)
@@ -152,7 +140,7 @@ templates = {
     'argsetters': """
     if (arg%d.argtype == OP_ARG_DAT) {
       if (arg%d.idx == OP_ALL)
-        copy_in<T%d>(n, arg%d, (char**)p_arg%d);
+        copy_in(n, arg%d, (char**)p_arg%d);
       else
         op_arg_set(n, arg%d, &p_arg%d );
     }
@@ -203,11 +191,10 @@ templates = {
     // Copy in of vector map indices
 %(argsetters)s
     // call kernel function, passing in pointers to data
-    int ilower;
-    int iupper;
-    int jlower;
-    int jupper;
-    bool seen_op_mat = false;
+    int ilower = 0;
+    int iupper = itspace->dims[0];
+    int jlower = 0;
+    int jupper = itspace->dims[1];
     int idxs[2];
 %(itspace_loop_prelim)s
 %(itspace_loop)s
@@ -245,50 +232,32 @@ templates = {
     'itspace_loop_prelim' : """
     int arg%didxs[2];
     if (arg%d.argtype == OP_ARG_MAT) {
-      int ilt;
       int iut;
-      int jlt;
       int jut;
       arg%didxs[0] = 0;
       arg%didxs[1] = 1;
       if (arg%d.idx == OP_ALL) {
-        ilt = 0;
         iut = arg%d.map->dim;
       } else if (arg%d.idx < OP_I_OFFSET) {
-        ilt = 0;
         iut = itspace->dims[op_i(arg%d.idx)-1];
-        if (seen_op_mat) {
-          arg%didxs[0] = op_i(arg%d.idx) - 1;
-        }
+        arg%didxs[0] = op_i(arg%d.idx) - 1;
       } else {
-        ilt = arg%d.idx;
-        iut = ilt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg %d, aborting\\n");
+        exit(-1);
       }
       if (arg%d.idx2 == OP_ALL) {
-        jlt = 0;
         jut = arg%d.map2->dim;
       } else if (arg%d.idx2 < OP_I_OFFSET) {
-        jlt = 0;
         jut = itspace->dims[op_i(arg%d.idx2)-1];
-        if (seen_op_mat) {
-          arg%didxs[1] = op_i(arg%d.idx) - 1;
-        }
+        arg%didxs[1] = op_i(arg%d.idx2) - 1;
       } else {
-        jlt = arg%d.idx2;
-        jut = jlt+1;
+        printf("Invalid index (not OP_ALL or op_i) for arg %d, aborting\\n");
+        exit(-1);
       }
-      if (seen_op_mat) {
-        assert (ilt == ilower
-                && iut == iupper
-                && jlt == jlower
-                && jut == jupper);
-      } else {
-        ilower = ilt;
-        iupper = iut;
-        jlower = jlt;
-        jupper = jut;
+      if (iut != iupper || jut != jupper) {
+        printf("Map dimensions do not match iteration space, aborting\\n");
+        exit(-1);
       }
-      seen_op_mat = true;
     }
 """,
     'itspace_loop' : """
@@ -338,7 +307,7 @@ with open(file_h,"w") as h:
             'argdefs': format_block("  char ", ";", "*p_arg%d = 0", ", ", 1, n, 4),
             'argchecks': '\n'.join(["    op_arg_check(set,%d ,arg%d ,&ninds,name);" % (i,i) for i in range(n)]),
             'allocate': ''.join([templates['allocate'] % ((i,)*11) for i in range(n)]),
-            'argsetters': ''.join([templates['argsetters'] % ((i,)*7) for i in range(n)]),
+            'argsetters': ''.join([templates['argsetters'] % ((i,)*6) for i in range(n)]),
             'mataddto': ''.join([templates['mataddto'] % ((i,)*7) for i in range(n)]),
             'kernelcall': format_block("    kernel( ", " );", "(T%d *)p_arg%d", ", ", 2, n, 4),
             'free': ''.join([templates['free'] % ((i,)*4) for i in range(n)]),
@@ -356,7 +325,7 @@ with open(file_h,"w") as h:
             'argdefs': format_block("  char ", ";", "*p_arg%d = 0", ", ", 1, n, 4),
             'argchecks': '\n'.join(["    op_arg_check(set,%d ,arg%d ,&ninds,name);" % (i,i) for i in range(n)]),
             'allocate_itspace': ''.join([templates['allocate_itspace'] % ((i,)*9) for i in range(n)]),
-            'argsetters': ''.join([templates['argsetters'] % ((i,)*7) for i in range(n)]),
+            'argsetters': ''.join([templates['argsetters'] % ((i,)*6) for i in range(n)]),
             'itspace_loop_prelim' : ''.join([templates['itspace_loop_prelim'] % ((i,)*18) for i in range(n)]),
             'itspace_loop' : ''.join([templates['itspace_loop']]),
             'itspace_zero_mat' : ''.join([templates['itspace_zero_mat'] % ((i,)*4) for i in range(n)]),
