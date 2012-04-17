@@ -60,17 +60,6 @@ op_itspace op_iteration_space(op_set set, int i, int j)
   return ret;
 }
 
-op_itspace op_iteration_space(op_set set, int i, int j)
-{
-  op_itspace ret = (op_itspace)malloc(sizeof(op_itspace_core));
-  ret->set = set;
-  ret->ndims = 2;
-  ret->dims = (int *)malloc(ret->ndims * sizeof(int));
-  ret->dims[0] = i;
-  ret->dims[1] = j;
-  return ret;
-}
-
 //
 // op_par_loop routine for 1 arguments
 //
